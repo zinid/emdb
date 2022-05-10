@@ -137,30 +137,6 @@ format_error_test() ->
     emdb:format_error({errno, Errno}),
     emdb:format_error({foo, bar}).
 
-cursor_failed_test() ->
-    Err = {error, einval},
-    T = ?FUNCTION_NAME,
-    ok = emdb:open_table(T),
-    meck:new(emdb_nif),
-    meck:expect(emdb_nif, txn_begin, fun(_, _) -> {ok, make_ref()} end),
-    meck:expect(emdb_nif, txn_abort, fun(_) -> ok end),
-    meck:expect(emdb_nif, txn_commit, fun(_) -> ok end),
-    meck:expect(emdb_nif, cursor_open, fun(_, _) -> Err end),
-    Err = emdb:txn(fun() -> emdb:first(T) end),
-    meck:unload(emdb_nif).
-
-aborted_test() ->
-    Reason = einval,
-    meck:new(emdb_nif),
-    meck:expect(emdb_nif, txn_begin, fun(_, _) -> {error, Reason} end),
-    ?assertError({aborted, {begin_failed, Reason}},
-                 emdb:txn(fun() -> ok end)),
-    meck:expect(emdb_nif, txn_begin, fun(_, _) -> {ok, make_ref()} end),
-    meck:expect(emdb_nif, txn_commit, fun(_) -> {error, Reason} end),
-    ?assertError({aborted, {commit_failed, Reason}},
-                 emdb:txn(fun() -> ok end)),
-    meck:unload(emdb_nif).
-
 stop_test() ->
     logger:set_primary_config(#{level => critical}),
     ok = emdb:stop(),
@@ -168,23 +144,6 @@ stop_test() ->
 
 double_stop_test() ->
     ok = emdb:stop().
-
-start_failed_test() ->
-    Error = {error, einval},
-    meck:new(emdb_nif),
-    meck:expect(emdb_nif, encode_errtag, fun(Tag) -> atom_to_list(Tag) end),
-    meck:expect(emdb_nif, strerror, fun(S) -> S end),
-    meck:expect(emdb_nif, env_set_maxreaders, fun(_, _) -> ok end),
-    meck:expect(emdb_nif, env_set_maxdbs, fun(_, _) -> ok end),
-    meck:expect(emdb_nif, env_set_mapsize, fun(_, _) -> ok end),
-    meck:expect(emdb_nif, encode_flags, fun(_) -> 0 end),
-    meck:expect(emdb_nif, env_close, fun(_) -> true end),
-    meck:expect(emdb_nif, env_create, fun() -> Error end),
-    meck:expect(emdb_nif, env_open, fun(_, _, _, _) -> Error end),
-    emdb:start(),
-    meck:expect(emdb_nif, env_create, fun() -> {ok, make_ref()} end),
-    emdb:start(),
-    meck:unload().
 
 invalid_dir_test() ->
     application:set_env(emdb, dir, "/root/foo/bar"),
