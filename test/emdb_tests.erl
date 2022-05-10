@@ -13,6 +13,9 @@
 %%%===================================================================
 %%% Tests
 %%%===================================================================
+not_running_test() ->
+    ?assertError(emdb_not_running, emdb_env:get()).
+
 start_test() ->
     set_db_dir(),
     del_db_dir(),
@@ -118,12 +121,79 @@ abort_test() ->
              end),
     ok = emdb:close_table(T).
 
+invalid_table_name_test() ->
+    ?assertError(badarg, emdb:open_table(1)),
+    ?assertError(badarg, emdb:close_table(1)),
+    ?assertError(badarg, emdb_env:dbi(1)).
+
+format_error_test() ->
+    "foo" = emdb:format_error(foo),
+    Errno = emdb_nif:encode_errtag(enomem),
+    emdb:format_error({errno, Errno}),
+    emdb:format_error({foo, bar}).
+
+cursor_failed_test() ->
+    Err = {error, einval},
+    T = ?FUNCTION_NAME,
+    ok = emdb:open_table(T),
+    meck:new(emdb_nif),
+    meck:expect(emdb_nif, txn_begin, fun(_, _) -> {ok, make_ref()} end),
+    meck:expect(emdb_nif, txn_abort, fun(_) -> ok end),
+    meck:expect(emdb_nif, txn_commit, fun(_) -> ok end),
+    meck:expect(emdb_nif, cursor_open, fun(_, _) -> Err end),
+    Err = emdb:txn(fun() -> emdb:first(T) end),
+    meck:unload(emdb_nif).
+
+aborted_test() ->
+    Reason = einval,
+    meck:new(emdb_nif),
+    meck:expect(emdb_nif, txn_begin, fun(_, _) -> {error, Reason} end),
+    ?assertError({aborted, {begin_failed, Reason}},
+                 emdb:txn(fun() -> ok end)),
+    meck:expect(emdb_nif, txn_begin, fun(_, _) -> {ok, make_ref()} end),
+    meck:expect(emdb_nif, txn_commit, fun(_) -> {error, Reason} end),
+    ?assertError({aborted, {commit_failed, Reason}},
+                 emdb:txn(fun() -> ok end)),
+    meck:unload(emdb_nif).
+
 stop_test() ->
+    logger:set_primary_config(#{level => critical}),
     ok = emdb:stop(),
     del_db_dir().
 
 double_stop_test() ->
     ok = emdb:stop().
+
+start_failed_test() ->
+    Error = {error, einval},
+    meck:new(emdb_nif),
+    meck:expect(emdb_nif, encode_errtag, fun(Tag) -> atom_to_list(Tag) end),
+    meck:expect(emdb_nif, strerror, fun(S) -> S end),
+    meck:expect(emdb_nif, env_set_maxreaders, fun(_, _) -> ok end),
+    meck:expect(emdb_nif, env_set_maxdbs, fun(_, _) -> ok end),
+    meck:expect(emdb_nif, env_set_mapsize, fun(_, _) -> ok end),
+    meck:expect(emdb_nif, encode_flags, fun(_) -> 0 end),
+    meck:expect(emdb_nif, env_close, fun(_) -> true end),
+    meck:expect(emdb_nif, env_create, fun() -> Error end),
+    meck:expect(emdb_nif, env_open, fun(_, _, _, _) -> Error end),
+    emdb:start(),
+    meck:expect(emdb_nif, env_create, fun() -> {ok, make_ref()} end),
+    emdb:start(),
+    meck:unload().
+
+invalid_dir_test() ->
+    application:set_env(emdb, dir, "/root/foo/bar"),
+    emdb:start(),
+    set_db_dir().
+
+invalid_env_opts_test() ->
+    Opts = [file_mode, mapsize, maxdbs, maxreaders],
+    lists:foreach(
+      fun(Opt) ->
+              application:set_env(emdb, Opt, -1),
+              application:start(emdb),
+              application:unset_env(emdb, Opt)
+      end, Opts).
 
 %%%===================================================================
 %%% Internal functions

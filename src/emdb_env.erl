@@ -66,19 +66,25 @@ open_table(Name, Flags) ->
     erlang:error(badarg, [Name, Flags]).
 
 -spec close_table(atom()) -> ok | {error, term()}.
+close_table(Name) when is_atom(Name) ->
+    gen_server:call(?MODULE, {close_table, Name}, ?CALL_TIMEOUT);
 close_table(Name) ->
-    gen_server:call(?MODULE, {close_table, Name}, ?CALL_TIMEOUT).
+    erlang:error(badarg, [Name]).
 
 -spec dbi(atom()) -> integer().
-dbi(Name) ->
+dbi(Name) when is_atom(Name) ->
     case ets:lookup(emdb_tables, Name) of
         [{_, Dbi}] -> Dbi;
         [] -> erlang:error({table_not_found, Name})
-    end.
+    end;
+dbi(Name) ->
+    erlang:error(badarg, [Name]).
 
 -spec get() -> env().
 get() ->
-    persistent_term:get(?MODULE).
+    try persistent_term:get(?MODULE)
+    catch error:badarg -> erlang:error(emdb_not_running)
+    end.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -86,7 +92,6 @@ get() ->
 -spec init([]) -> {ok, state()} | {stop, term()}.
 init([]) ->
     process_flag(trap_exit, true),
-    logger:set_process_metadata(#{domain => [emdb, env]}),
     case get_vars() of
         {ok, #{dir := Dir, flags := Flags, opts := Opts, file_mode := Mode}} ->
             case emdb_nif:env_create() of
@@ -246,7 +251,7 @@ get_vars([Key|Vars], #{opts := Opts} = Acc) when Key == mapsize;
 get_vars([], Acc) ->
     {ok, Acc}.
 
-default(mapsize) -> 1024*1024;
+default(mapsize) -> 10*1024*1024;
 default(maxdbs) -> 10;
 default(maxreaders) -> 128.
 
