@@ -13,11 +13,13 @@ struct env_state {
 struct txn_state {
   atomic_flag is_closed;
   MDB_txn *mdb_txn;
+  struct env_state *env_state;
 };
 
 struct cursor_state {
   atomic_flag is_closed;
   MDB_cursor *mdb_cursor;
+  struct txn_state *txn_state;
 };
 
 static ErlNifResourceType *env_rtype = NULL;
@@ -67,15 +69,21 @@ static void destroy_env_state(ErlNifEnv *env, void *data) {
 static void destroy_txn_state(ErlNifEnv *env, void *data) {
   struct txn_state *txn_state = data;
 
-  if (atomic_flag_test_and_set(&txn_state->is_closed) == 0)
+  if (atomic_flag_test_and_set(&txn_state->is_closed) == 0) {
     mdb_txn_abort(txn_state->mdb_txn);
+    if (txn_state->env_state)
+      enif_release_resource(txn_state->env_state);
+  }
 }
 
 static void destroy_cursor_state(ErlNifEnv *env, void *data) {
   struct cursor_state *cursor_state = data;
 
-  if (atomic_flag_test_and_set(&cursor_state->is_closed) == 0)
+  if (atomic_flag_test_and_set(&cursor_state->is_closed) == 0) {
     mdb_cursor_close(cursor_state->mdb_cursor);
+    if (cursor_state->txn_state)
+      enif_release_resource(cursor_state->txn_state);
+  }
 }
 
 static int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info) {
@@ -275,6 +283,9 @@ static ERL_NIF_TERM txn_begin_nif(ErlNifEnv *env, int argc,
   if (err)
     return make_errno(env, err);
 
+  txn_state->env_state = env_state;
+  enif_keep_resource(env_state);
+
   return make_ok(env, ref);
 }
 
@@ -287,6 +298,8 @@ static ERL_NIF_TERM txn_commit_nif(ErlNifEnv *env, int argc,
 
   if (atomic_flag_test_and_set(&txn_state->is_closed) == 0) {
     int err = mdb_txn_commit(txn_state->mdb_txn);
+    if (txn_state->env_state)
+      enif_release_resource(txn_state->env_state);
     if (err)
       return make_errno(env, err);
   }
@@ -301,8 +314,7 @@ static ERL_NIF_TERM txn_abort_nif(ErlNifEnv *env, int argc,
   if (enif_get_resource(env, argv[0], txn_rtype, (void **)&txn_state) == 0)
     return enif_make_badarg(env);
 
-  if (atomic_flag_test_and_set(&txn_state->is_closed) == 0)
-    mdb_txn_abort(txn_state->mdb_txn);
+  destroy_txn_state(env, txn_state);
 
   return atom_ok;
 }
@@ -466,6 +478,9 @@ static ERL_NIF_TERM cursor_open_nif(ErlNifEnv *env, int argc,
   if (err)
     return make_errno(env, err);
 
+  cursor_state->txn_state = txn_state;
+  enif_keep_resource(txn_state);
+
   return make_ok(env, ref);
 }
 
@@ -477,8 +492,7 @@ static ERL_NIF_TERM cursor_close_nif(ErlNifEnv *env, int argc,
       0)
     return enif_make_badarg(env);
 
-  if (atomic_flag_test_and_set(&cursor_state->is_closed) == 0)
-    mdb_cursor_close(cursor_state->mdb_cursor);
+  destroy_cursor_state(env, cursor_state);
 
   return atom_ok;
 }

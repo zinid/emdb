@@ -21,6 +21,9 @@ start_test() ->
 double_start_test() ->
     ok = emdb:start().
 
+version_test() ->
+    {_, _, _} = emdb:version().
+
 open_close_table_test() ->
     T = ?FUNCTION_NAME,
     ok = emdb:open_table(T),
