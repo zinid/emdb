@@ -1,0 +1,15 @@
+{application, emdb,
+ [{description, "Erlang LMDB wrapper"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, {emdb, []}},
+  {applications,
+   [kernel,
+    stdlib
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {licenses, ["Apache-2.0"]},
+  {links, []}
+ ]}.
