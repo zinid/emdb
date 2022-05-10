@@ -48,6 +48,18 @@ aborted_test() ->
                  emdb:txn(fun() -> ok end)),
     unmeck_nif().
 
+dbi_open_failed_test() ->
+    Reason = einval,
+    Err = {error, Reason},
+    Aborted = {aborted, Reason},
+    T = ?FUNCTION_NAME,
+    meck_nif(),
+    meck:expect(emdb_nif, dbi_open, fun(_, _, _) -> Err end),
+    Err = emdb:open_table(T),
+    meck:expect(emdb_nif, dbi_open, fun(_, _, _) -> erlang:error(Aborted) end),
+    ?assertEqual({error, Aborted}, emdb:open_table(T)),
+    unmeck_nif().
+
 stop_test() ->
     meck_nif(),
     ok = emdb:stop(),
