@@ -27,6 +27,11 @@ double_start_test() ->
 version_test() ->
     {_, _, _} = emdb:version().
 
+unexpected_msg_test() ->
+    emdb_env ! unexpected_info,
+    ?assertExit({timeout, _}, gen_server:call(emdb_env, unexpected_call, 100)),
+    gen_server:cast(emdb_env, unexpected_cast).
+
 open_close_table_test() ->
     T = ?FUNCTION_NAME,
     ok = emdb:open_table(T),
