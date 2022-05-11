@@ -13,8 +13,8 @@
 %%%===================================================================
 %%% Tests
 %%%===================================================================
-not_running_test() ->
-    ?assertError(emdb_not_running, emdb_env:get()).
+not_started_test() ->
+    ?assertError(emdb_not_started, emdb_env:get()).
 
 start_test() ->
     set_db_dir(),

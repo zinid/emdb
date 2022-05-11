@@ -83,7 +83,7 @@ dbi(Name) ->
 -spec get() -> env().
 get() ->
     try persistent_term:get(?MODULE)
-    catch error:badarg -> erlang:error(emdb_not_running)
+    catch error:badarg -> erlang:error(emdb_not_started)
     end.
 
 %%%===================================================================
@@ -142,17 +142,17 @@ handle_call({close_table, Name}, _From, State) ->
             end,
     {reply, Reply, State};
 handle_call(Request, {Pid, _}, State) ->
-    ?LOG_WARNING("unexpected call from ~0p: ~0p", [Pid, Request]),
+    ?LOG_WARNING("Unexpected call from ~0p: ~0p", [Pid, Request]),
     {noreply, State}.
 
 -spec handle_cast(term(), state()) -> {noreply, state()}.
 handle_cast(Request, State) ->
-    ?LOG_WARNING("unexpected cast: ~0p", [Request]),
+    ?LOG_WARNING("Unexpected cast: ~0p", [Request]),
     {noreply, State}.
 
 -spec handle_info(term(), state()) -> {noreply, state()}.
 handle_info(Info, State) ->
-    ?LOG_WARNING("unexpected info: ~0p", [Info]),
+    ?LOG_WARNING("Unexpected info: ~0p", [Info]),
     {noreply, State}.
 
 -spec terminate(term(), state()) -> any().
